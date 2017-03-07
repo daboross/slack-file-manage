@@ -27,19 +27,38 @@ def run():
                 cache = json.load(f)
         except FileNotFoundError:
             cache = None
-        if not args.cache_files_result:
-            del cache['files']
+        if not args.cache_files_result and cache is not None:
+            cache['files'] = None
         api = sfm.API(token, cache)
     else:
         api = sfm.API(token)
 
     api.create_file_cache()
-    count = 0
-    bytes = 0
+
+    total_count = len(api.files)
+    total_image_count = 0
+    total_bytes = 0
+    total_image_bytes = 0
+    for file in api.files:
+        if 'image' in file['mimetype']:
+            total_image_count += 1
+            total_image_bytes += file['size']
+        total_bytes += file['size']
+
+    not_used_count = len(api.no_stars_no_pins_files)
+    not_used_image_count = 0
+    not_used_bytes = 0
+    not_used_image_bytes = 0
     for file in api.no_stars_no_pins_files:
-        count += 1
-        bytes += file['size']
-    print("Found {} total files, {} abandoned files, totaling {} bytes.".format(len(api.files), count, bytes))
+        if 'image' in file['mimetype']:
+            not_used_image_count += 1
+            not_used_image_bytes += file['size']
+        not_used_bytes += file['size']
+    print("Found {} files, totaling {} bytes.".format(total_count, total_bytes))
+    print("Of those, found {} image files, totaling {} bytes.".format(total_image_count, total_image_bytes))
+    print()
+    print("Found {} abandoned files, totaling {} bytes.".format(not_used_count, not_used_bytes))
+    print("Of those, found {} image files, totaling {} bytes.".format(not_used_image_count, not_used_image_bytes))
 
     if args.cache:
         with open("screeps-cache.json", mode='w') as f:
