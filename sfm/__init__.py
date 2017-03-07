@@ -12,7 +12,7 @@ def get_all_from_api_method(method, list_key, desc):
     next_page = 1
     while True:
         try:
-            next_result = method(page=next_page)
+            next_result = method(page=next_page, count=200)
         except (requests.exceptions.HTTPError, slacker.Error) as e:
             print("error getting page {} of {}: {}. Waiting 20 seconds".format(next_page, desc, e))
             time.sleep(20)
@@ -27,7 +27,9 @@ def get_all_from_api_method(method, list_key, desc):
         page_count = next_result['paging']['pages']
         print("Got {} page {} of {}.".format(desc, page, page_count))
         if page < page_count:
-            next_page = page + 1
+            if page != next_page:
+                print("Expected page we got to be {}, found {}".format(next_page, page))
+            next_page += 1
         else:
             break
     return full_list
