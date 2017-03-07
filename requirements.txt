@@ -1,0 +1,4 @@
+slacker
+websockets
+requests
+colorama
