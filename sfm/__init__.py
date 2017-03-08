@@ -81,6 +81,8 @@ class API:
 
         right_now = datetime.datetime.now(datetime.timezone.utc)
         old_date = (right_now - datetime.timedelta(days=60)).timestamp()
+        print("Counting files updated earlier than {} as old enough to be abandoned"
+              " (if they are also not starred nor pinned).".format(old_date))
 
         for file in self.raw_files:
             file = copy.deepcopy(file)
