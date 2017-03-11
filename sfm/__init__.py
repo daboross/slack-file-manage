@@ -8,6 +8,9 @@ from pip._vendor import colorama
 
 
 def get_all_from_api_method(method, list_key, desc):
+    """
+    :rtype: list[dict[str, Any]]
+    """
     full_list = []
     next_page = 1
     while True:
@@ -65,6 +68,9 @@ class API:
             self.no_stars_no_pins_files = None
 
     def get_raw_file_list(self):
+        """
+        :rtype: list[dict[str, Any]]
+        """
         if self.raw_files is not None:
             return self.raw_files
 
@@ -84,7 +90,7 @@ class API:
         print("Counting files updated earlier than {} as old enough to be abandoned"
               " (if they are also not starred nor pinned).".format(old_date))
 
-        for file in self.raw_files:
+        for file in raw_files:
             file = copy.deepcopy(file)
             file['channels'] = [self.channels_by_id.get(channel_id, {}).get('name', channel_id)
                                 for channel_id in file['channels']]
@@ -112,6 +118,28 @@ class API:
         self.users_by_id = {}
         for user in users['members']:
             self.users_by_id[user['id']] = user
+
+    def get_file_contents_iter(self, file_obj):
+        url = file_obj['url_private']
+        if url.startswith('https://files.slack.com/'):
+            result = requests.get(url, headers={'Authorization': 'Bearer {}'.format(self.api.files.token)},
+                                  stream=True)
+            result.raise_for_status()
+            if 'html' in result.headers.get('content-type'):  # << TODO: actually parse stuff here!
+                print("Got non-raw result from downloading {}, trying again in 60 seconds (one time retry)."
+                      .format(result.url))
+                time.sleep(60)
+                result = requests.get(url, headers={'Authorization': 'Bearer {}'.format(self.api.files.token)},
+                                      stream=True)
+                if 'html' in result.headers.get('content-type'):  # << TODO: actually parse stuff here!
+
+                    raise ValueError("Recieved non-raw result from downloading {} (login page?): {} ({}\n{})"
+                                     .format(result.url, result.headers.get('content-type'), result, result.content))
+            return result.iter_content(1024)
+        elif url.startswith('https://gist.github.com/') or url.startswith('https://docs.google.com/'):
+            return None
+        else:
+            raise ValueError("Unknown url type: {}".format(url))
 
     def serialize(self):
         # self.channels_by_id = file_cache['channels']

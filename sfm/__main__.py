@@ -1,5 +1,8 @@
 import argparse
 import json
+from pathlib import Path
+
+import os
 
 import sfm
 
@@ -12,8 +15,10 @@ def run():
                         help='cache intermediate results in screeps-cache.json')
     parser.add_argument('--no-file-cache', dest='cache_files_result', action='store_false', default=True,
                         help='when caching, disables caching files and only caches raw results')
+    parser.add_argument('--download-files', dest='download_files', action='store_true', default=False,
+                        help='if used, download all files into ./downloads/ and create a ./downloads/files.json file containing metadata.')
     parser.add_argument('--delete-abandoned-images', dest='delete_abandoned_images', action='store_true', default=False,
-                        help='if true, send delete commands for all abandoned image files!')
+                        help='if used, send delete commands for all abandoned image files!')
 
     args = parser.parse_args()
 
@@ -29,8 +34,10 @@ def run():
                 cache = json.load(f)
         except FileNotFoundError:
             cache = None
-        if not args.cache_files_result and cache is not None:
-            cache['files'] = None
+        else:
+            print("Loaded cache.")
+            if not args.cache_files_result:
+                cache['files'] = None
         api = sfm.API(token, cache)
     else:
         api = sfm.API(token)
@@ -67,6 +74,50 @@ def run():
     print()
     print("Found {} abandoned files, totaling {} bytes.".format(not_used_count, not_used_bytes))
     print("Of those, found {} image files, totaling {} bytes.".format(not_used_image_count, not_used_image_bytes))
+
+    if args.cache:
+        print("Writing cache.")
+        with open("screeps-cache.json", mode='w') as f:
+            json.dump(api.serialize(), f, indent=4)
+
+    if args.download_files:
+        root_path = Path(os.getcwd()).joinpath('downloads')
+        print("Downloading to {}.".format(root_path))
+        try:
+            root_path.mkdir(mode=0o755, parents=True)
+        except FileExistsError:
+            pass
+        file_info_dict = {}
+        total = len(api.files)
+        for index, file_obj in enumerate(api.files):
+            file_filename = file_obj['id']
+            if 'updated' in file_filename:
+                file_filename += 'updated-{}'.format(file_filename['updated'])
+            file_filename += os.path.splitext(file_obj['name'])[1]
+            file_obj['relative_file_path'] = file_filename
+            file_info_dict[file_filename] = file_obj
+
+            target_path = root_path.joinpath(file_filename)
+            if target_path.exists():
+                with target_path.open('rb') as f:
+                    is_empty = len(f.read(1)) <= 0
+                if not is_empty:
+                    print("[{}/{}] Skipping {}.".format(index + 1, total, target_path))
+                    continue
+            print("Downloading {} ({}) to {}.".format(file_obj['id'], file_obj['name'], target_path))
+            with target_path.open('wb') as f:
+                contents = api.get_file_contents_iter(file_obj)
+                if contents is not None:
+                    for block in contents:
+                        f.write(block)
+                else:
+                    print("{} is a gist or google docs file, writing URL instead.".format(file_filename))
+                    f.write(file_obj['url_private'].encode())
+            print("[{}/{}] Finished {}.".format(index + 1, total, file_filename))
+        downloads_files_path = root_path.joinpath('files.json')
+        print("Writing {}.".format(downloads_files_path))
+        with downloads_files_path.open('w') as f:
+            json.dump(file_info_dict, f)
 
     if args.delete_abandoned_images:
         mime_types = set()
@@ -108,12 +159,9 @@ To delete the above files, enter "delete"
                   "\n--------------")
             for image_id in image_ids:
                 print(image_id)
-                #api.api.files.delete(image_id)
+                api.api.files.delete(image_id)
         else:
             print("Did not enter 'delete', exiting.")
-    if args.cache:
-        with open("screeps-cache.json", mode='w') as f:
-            json.dump(api.serialize(), f, indent=4)
 
 
 run()
